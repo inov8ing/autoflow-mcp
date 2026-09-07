@@ -1,16 +1,37 @@
 {
   "name": "autoflow-mcp",
   "version": "2.0.0",
-  "description": "SaaS-ready Autoflow MCP Server for Google Flow via Autoflow Chrome Extension Bridge",
+  "description": "Zero-config Model Context Protocol (MCP) server for Google Flow via Autoflow Chrome Extension",
   "type": "module",
   "main": "src/index.js",
   "bin": {
     "autoflow-mcp": "./src/index.js"
   },
+  "files": [
+    "src",
+    "extension-bridge",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node src/index.js",
     "test": "node test-bridge.mjs && node test-queue.mjs"
   },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "google-flow",
+    "veo",
+    "veo-3",
+    "nano-banana",
+    "imagen",
+    "ai-agent",
+    "claude",
+    "opencode",
+    "chrome-extension"
+  ],
+  "author": "Rizwan <memrrizwan@gmail.com>",
+  "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.9.0",
     "ws": "^8.18.0",
@@ -20,4 +41,3 @@
     "node": ">=18.0.0"
   }
 }
-
