@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/index.js",
   "bin": {
-    "autoflow-mcp": "./src/index.js"
+    "autoflow-mcp": "src/index.js"
   },
   "files": [
     "src",

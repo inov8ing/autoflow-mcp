@@ -286,6 +286,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
       }
     }
+  } else if (message.type === 'GET_MCP_STATUS') {
+    sendResponse({ connected: isConnected, url: MCP_WS_URL, port: MCP_WS_PORT });
+    return true;
   }
 });
 
@@ -301,6 +304,10 @@ export function initMcpBridge() {
     socket.onopen = () => {
       isConnected = true;
       log(`Connected to Autoflow MCP Server at ${MCP_WS_URL}`);
+      try {
+        chrome.storage.local.set({ mcp_connected: true, mcp_port: MCP_WS_PORT, mcp_last_seen: Date.now() });
+      } catch (e) {}
+
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
@@ -328,12 +335,18 @@ export function initMcpBridge() {
         log('Disconnected from Autoflow MCP Server. Will attempt reconnect...');
       }
       isConnected = false;
+      try {
+        chrome.storage.local.set({ mcp_connected: false });
+      } catch (e) {}
       scheduleReconnect();
     };
 
     socket.onerror = () => {
       // Quietly handle connection errors (server may not be running yet)
       isConnected = false;
+      try {
+        chrome.storage.local.set({ mcp_connected: false });
+      } catch (e) {}
     };
   } catch (err) {
     scheduleReconnect();
