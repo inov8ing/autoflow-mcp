@@ -56,6 +56,12 @@ export function startBridgeServer(port = process.env.AUTOFLOW_PORT || DEFAULT_PO
 
   wss.on('error', (err) => {
     console.error('[Autoflow Bridge] Server error:', err.message);
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n❌ FATAL: Port ${numericPort} is already in use.`);
+      console.error(`Another instance of Autoflow MCP is likely running in the background.`);
+      console.error(`Please kill all orphaned Node.js processes and try again.\n`);
+      process.exit(1);
+    }
   });
 
   return { wss, port: numericPort };
