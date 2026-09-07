@@ -1,20 +1,23 @@
 {
-  "name": "google-flow-browser-mcp",
-  "version": "1.0.0",
-  "description": "MCP server for Google Flow (labs.google/fx/tools/flow) via browser automation",
+  "name": "autoflow-mcp",
+  "version": "2.0.0",
+  "description": "SaaS-ready Autoflow MCP Server for Google Flow via Autoflow Chrome Extension Bridge",
   "type": "module",
   "main": "src/index.js",
+  "bin": {
+    "autoflow-mcp": "./src/index.js"
+  },
   "scripts": {
     "start": "node src/index.js",
-    "test": "node scripts/test-flow-image.sh",
-    "discover": "node -e \"console.log('Run: bash scripts/test-flow-image.sh')\""
+    "test": "node test-bridge.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.9.0",
-    "playwright": "^1.51.0",
+    "ws": "^8.18.0",
     "zod": "^3.24.0"
   },
   "engines": {
     "node": ">=18.0.0"
   }
 }
+
