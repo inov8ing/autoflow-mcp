@@ -1,4 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
+import fs from 'fs';
+import path from 'path';
 
 const DEFAULT_PORT = 19845;
 const DEFAULT_HOST = '127.0.0.1';
@@ -172,5 +174,30 @@ export function closeBridgeServer() {
     activeSocket = null;
     extensionInfo = null;
   }
+}
+
+export async function downloadAndSaveAsset(url, outputPath) {
+  try {
+    const dir = path.dirname(outputPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    if (url.startsWith('data:image/')) {
+      const base64Data = url.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      fs.writeFileSync(outputPath, buffer);
+      return { success: true, path: outputPath, bytes: buffer.length };
+    } else if (url.startsWith('http')) {
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        fs.writeFileSync(outputPath, buffer);
+        return { success: true, path: outputPath, bytes: buffer.length };
+      }
+      return { success: false, error: `HTTP ${resp.status}` };
+    }
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+  return { success: false, error: 'Unsupported URL protocol' };
 }
 

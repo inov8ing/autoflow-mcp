@@ -393,6 +393,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         status: data.status,
         prompt: data.prompt
       });
+
+      // If generation reports 100% or completed, ensure caller resolves even if download takes extra time
+      if (data.percentage >= 100 || data.status === 'completed') {
+        if (!job.completeGraceTimer) {
+          job.completeGraceTimer = setTimeout(() => {
+            if (activeJobs.has(data.groupId)) {
+              log(`Auto-resolving job ${data.groupId} after 100% progress`);
+              if (job.watchdogTimer) clearTimeout(job.watchdogTimer);
+              activeJobs.delete(data.groupId);
+              sendToMcp({
+                id: job.id,
+                success: true,
+                status: 'completed',
+                message: 'Generation completed at 100%',
+                prompt: data.prompt
+              });
+            }
+          }, 6000);
+        }
+      }
     }
   } else if (message.type === 'PROMPT_GROUP_STATUS') {
     const { data } = message;

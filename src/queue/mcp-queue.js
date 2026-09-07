@@ -1,4 +1,5 @@
-import { sendRpc, isExtensionConnected } from '../bridge/ws-server.js';
+import { sendRpc, isExtensionConnected, downloadAndSaveAsset } from '../bridge/ws-server.js';
+import path from 'path';
 
 export class McpJobQueue {
   constructor() {
@@ -88,6 +89,30 @@ export class McpJobQueue {
       this.activeJob.completedAt = new Date().toISOString();
       this.activeJob.progress = 100;
       this.activeJob.result = result;
+
+      // Double-Engine direct download: automatically save generated asset URLs directly to disk
+      if (result && Array.isArray(result.results)) {
+        const folder = (this.activeJob.params?.folderName || 'Autoflow_MCP').trim();
+        const userFolder = path.join('C:\\Users\\Rizwan\\Downloads', folder);
+        const localFolder = path.resolve('downloads', folder);
+
+        for (const res of result.results) {
+          if (res.assetUrls && Array.isArray(res.assetUrls)) {
+            for (let i = 0; i < res.assetUrls.length; i++) {
+              const url = res.assetUrls[i];
+              const ext = url.includes('.mp4') ? 'mp4' : 'png';
+              const filename = `${this.activeJob.id}_asset_${i + 1}.${ext}`;
+              try {
+                await downloadAndSaveAsset(url, path.join(userFolder, filename));
+                await downloadAndSaveAsset(url, path.join(localFolder, filename));
+                console.error(`[Autoflow Queue] Double-Engine saved asset to: ${path.join(userFolder, filename)}`);
+              } catch (saveErr) {
+                console.error(`[Autoflow Queue] Double-Engine auto-save error:`, saveErr.message);
+              }
+            }
+          }
+        }
+      }
 
       this.addToHistory(this.activeJob);
       this.activeJob.resolve(result);
