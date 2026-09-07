@@ -1,0 +1,162 @@
+import { sendRpc, isExtensionConnected } from '../bridge/ws-server.js';
+
+export class McpJobQueue {
+  constructor() {
+    this.queue = [];
+    this.activeJob = null;
+    this.history = [];
+    this.isProcessing = false;
+  }
+
+  // Enqueue a new generation job with strict sequential FIFO processing
+  enqueue(params) {
+    const id = `job_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const job = {
+      id,
+      prompt: params.prompt,
+      params,
+      status: 'queued',
+      progress: 0,
+      progressStatus: 'queued',
+      createdAt: new Date().toISOString(),
+      startedAt: null,
+      completedAt: null,
+      result: null,
+      error: null
+    };
+
+    const promise = new Promise((resolve, reject) => {
+      job.resolve = resolve;
+      job.reject = reject;
+    });
+
+    this.queue.push(job);
+    console.error(`[Autoflow Queue] Enqueued job ${id} ("${params.prompt.substring(0, 40)}..."). Queue depth: ${this.queue.length}`);
+    this.processNext();
+
+    return promise;
+  }
+
+  async processNext() {
+    if (this.isProcessing || this.queue.length === 0) {
+      return;
+    }
+
+    this.isProcessing = true;
+    this.activeJob = this.queue.shift();
+    this.activeJob.status = 'running';
+    this.activeJob.startedAt = new Date().toISOString();
+
+    console.error(`[Autoflow Queue] Processing job ${this.activeJob.id}: "${this.activeJob.prompt.substring(0, 40)}..."`);
+
+    try {
+      const result = await sendRpc('GENERATE', this.activeJob.params, {
+        timeoutMs: 600000, // 10 minute timeout
+        onProgress: (prog) => {
+          if (this.activeJob) {
+            this.activeJob.progress = prog.percentage || this.activeJob.progress;
+            this.activeJob.progressStatus = prog.status || 'generating';
+          }
+        }
+      });
+
+      this.activeJob.status = 'completed';
+      this.activeJob.completedAt = new Date().toISOString();
+      this.activeJob.progress = 100;
+      this.activeJob.result = result;
+
+      this.addToHistory(this.activeJob);
+      this.activeJob.resolve(result);
+    } catch (err) {
+      console.error(`[Autoflow Queue] Job ${this.activeJob.id} failed:`, err.message);
+      this.activeJob.status = 'failed';
+      this.activeJob.completedAt = new Date().toISOString();
+      this.activeJob.error = err.message;
+
+      this.addToHistory(this.activeJob);
+      this.activeJob.reject(err);
+    } finally {
+      this.activeJob = null;
+      this.isProcessing = false;
+      this.processNext();
+    }
+  }
+
+  // Cancel an active or pending job
+  async cancel(jobId) {
+    // If no jobId specified, cancel active job or first pending
+    if (!jobId && this.activeJob) {
+      jobId = this.activeJob.id;
+    }
+
+    if (this.activeJob && this.activeJob.id === jobId) {
+      console.error(`[Autoflow Queue] Cancelling active job ${jobId}`);
+      try {
+        await sendRpc('CANCEL', { groupId: this.activeJob.id });
+      } catch (e) {}
+
+      this.activeJob.status = 'cancelled';
+      this.activeJob.completedAt = new Date().toISOString();
+      this.activeJob.error = 'Cancelled by user';
+      this.addToHistory(this.activeJob);
+      this.activeJob.reject(new Error('Job was cancelled'));
+
+      this.activeJob = null;
+      this.isProcessing = false;
+      this.processNext();
+      return { success: true, message: `Active job ${jobId} cancelled` };
+    }
+
+    const index = this.queue.findIndex(j => j.id === jobId);
+    if (index !== -1) {
+      const [removed] = this.queue.splice(index, 1);
+      removed.status = 'cancelled';
+      removed.completedAt = new Date().toISOString();
+      removed.error = 'Cancelled before execution';
+      this.addToHistory(removed);
+      removed.reject(new Error('Job was cancelled from queue'));
+      return { success: true, message: `Queued job ${jobId} cancelled` };
+    }
+
+    return { success: false, message: `Job ${jobId || 'current'} not found` };
+  }
+
+  addToHistory(job) {
+    this.history.unshift({
+      id: job.id,
+      prompt: job.prompt,
+      status: job.status,
+      createdAt: job.createdAt,
+      startedAt: job.startedAt,
+      completedAt: job.completedAt,
+      progress: job.progress,
+      error: job.error
+    });
+
+    if (this.history.length > 20) {
+      this.history.pop();
+    }
+  }
+
+  getQueueState() {
+    return {
+      activeJob: this.activeJob ? {
+        id: this.activeJob.id,
+        prompt: this.activeJob.prompt,
+        status: this.activeJob.status,
+        progress: this.activeJob.progress,
+        progressStatus: this.activeJob.progressStatus,
+        startedAt: this.activeJob.startedAt
+      } : null,
+      queueLength: this.queue.length,
+      pendingJobs: this.queue.map(j => ({
+        id: j.id,
+        prompt: j.prompt,
+        createdAt: j.createdAt
+      })),
+      recentHistory: this.history.slice(0, 5)
+    };
+  }
+}
+
+export const jobQueue = new McpJobQueue();

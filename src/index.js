@@ -13,6 +13,7 @@ import {
   getExtensionInfo,
   sendRpc
 } from './bridge/ws-server.js';
+import { jobQueue } from './queue/mcp-queue.js';
 
 // Start the local WebSocket Bridge for the Autoflow Chrome Extension
 const port = process.env.AUTOFLOW_PORT || 19845;
@@ -49,8 +50,16 @@ const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: 'autoflow_get_queue',
+    description: 'Inspect the current status of the Autoflow sequential job queue (active job, pending jobs, and recent history).',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
     name: 'autoflow_generate',
-    description: 'Generate an AI video or image on Google Flow using Veo 3 or Nano Banana models via the Autoflow extension.',
+    description: 'Generate an AI video or image on Google Flow using Veo 3 or Nano Banana models via the Autoflow extension (queued sequentially).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -110,13 +119,13 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: 'autoflow_cancel',
-    description: 'Cancel any running or queued generation in Google Flow.',
+    description: 'Cancel any running or queued generation job in Google Flow.',
     inputSchema: {
       type: 'object',
       properties: {
-        groupId: {
+        jobId: {
           type: 'string',
-          description: 'Optional group ID of the job to cancel.'
+          description: 'Optional job ID to cancel. If omitted, cancels the currently active job.'
         }
       }
     }
@@ -166,7 +175,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   status: 'connected',
                   extensionConnected: true,
                   extension: info.info,
-                  flow: extStatus
+                  flow: extStatus,
+                  queue: jobQueue.getQueueState()
                 },
                 null,
                 2
@@ -183,6 +193,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: JSON.stringify(result, null, 2)
+            }
+          ]
+        };
+      }
+
+      case 'autoflow_get_queue': {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(jobQueue.getQueueState(), null, 2)
             }
           ]
         };
@@ -208,9 +229,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           folderName: args.folderName || 'Autoflow_MCP'
         };
 
-        const result = await sendRpc('GENERATE', params, {
-          timeoutMs: 600000 // 10 minutes
-        });
+        // Route through the sequential FIFO queue to prevent collisions
+        const result = await jobQueue.enqueue(params);
 
         return {
           content: [
@@ -235,7 +255,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'autoflow_cancel': {
-        const result = await sendRpc('CANCEL', { groupId: args.groupId }, { timeoutMs: 10000 });
+        const result = await jobQueue.cancel(args.jobId || args.groupId);
         return {
           content: [
             {

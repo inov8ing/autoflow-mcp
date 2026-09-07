@@ -7,8 +7,8 @@ console.log('Starting local WebSocket bridge on ws://127.0.0.1:19845...');
 
 startBridgeServer(19845);
 
-console.log('Waiting up to 10 seconds for Chrome Extension to connect...');
-console.log('💡 Tip: Make sure your Autoflow extension is reloaded in chrome://extensions\n');
+console.log('Waiting up to 30 seconds for Chrome Extension to connect...');
+console.log('💡 Tip: Keep Chrome open — it will connect automatically!\n');
 
 let elapsed = 0;
 const interval = setInterval(async () => {
@@ -38,7 +38,7 @@ const interval = setInterval(async () => {
     process.exit(0);
   }
 
-  if (elapsed >= 10) {
+  if (elapsed >= 30) {
     clearInterval(interval);
     console.log('\n⏳ Extension has not connected yet.');
     console.log('To connect:');

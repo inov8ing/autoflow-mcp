@@ -28,34 +28,85 @@ async function getFlowTab() {
     const tabs = await chrome.tabs.query({
       url: ['*://flow.google.com/*', '*://labs.google/*']
     });
-    return tabs.find(t => t.url && (t.url.includes('flow.google.com') || t.url.includes('labs.google'))) || null;
+    const tab = tabs.find(t => t.url && (t.url.includes('flow.google.com') || t.url.includes('labs.google'))) || null;
+    if (tab && tab.id) {
+      // Memory-Saver Shield: prevent Chrome from freezing/discarding this tab
+      try {
+        chrome.tabs.update(tab.id, { autoDiscardable: false });
+      } catch (e) {}
+    }
+    return tab;
   } catch (err) {
     warn('Error querying flow tabs:', err);
     return null;
   }
 }
 
-// Ensure Flow tab is open and ready
-async function ensureFlowTab() {
+// Ensure Flow tab is open, protected from memory discarding, and ready
+async function ensureFlowTab(options = {}) {
+  const { makeActive = false } = options;
   let tab = await getFlowTab();
+
   if (tab && tab.id) {
+    // Check if the tab's window is minimized. If minimized, un-minimize to normal state without stealing focus
+    try {
+      const win = await chrome.windows.get(tab.windowId);
+      if (win.state === 'minimized') {
+        await chrome.windows.update(tab.windowId, { state: 'normal', focused: false });
+      }
+    } catch (e) {}
+
+    // Ensure tab cannot be discarded by Chrome Memory Saver
+    try {
+      await chrome.tabs.update(tab.id, { autoDiscardable: false, active: makeActive });
+    } catch (e) {}
+
     return tab;
   }
-  log('No active Flow tab found, opening https://flow.google.com/...');
+
+  log('No active Flow tab found, opening https://flow.google.com/ in background...');
   tab = await chrome.tabs.create({
     url: 'https://flow.google.com/',
-    active: true
+    active: makeActive
   });
-  
-  // Wait up to 10 seconds for navigation
-  for (let i = 0; i < 20; i++) {
+
+  // Protect from discard immediately
+  try {
+    chrome.tabs.update(tab.id, { autoDiscardable: false });
+  } catch (e) {}
+
+  // Wait up to 15 seconds for navigation
+  for (let i = 0; i < 30; i++) {
     await new Promise(r => setTimeout(r, 500));
-    const current = await chrome.tabs.get(tab.id);
-    if (current && current.status === 'complete') {
-      return current;
-    }
+    try {
+      const current = await chrome.tabs.get(tab.id);
+      if (current && current.status === 'complete') {
+        await new Promise(r => setTimeout(r, 1000));
+        return current;
+      }
+    } catch (e) {}
   }
   return tab;
+}
+
+// Verify content script readiness before dispatching commands
+async function waitForContentScript(tabId, maxWaitMs = 5000) {
+  const startTime = Date.now();
+  while (Date.now() - startTime < maxWaitMs) {
+    try {
+      const response = await new Promise((resolve) => {
+        chrome.tabs.sendMessage(tabId, { type: 'CHECK_FLOW_PAGE' }, (res) => {
+          if (chrome.runtime.lastError) resolve(null);
+          else resolve(res);
+        });
+      });
+      if (response && response.isFlowPage) {
+        return true;
+      }
+    } catch (e) {}
+    await new Promise(r => setTimeout(r, 500));
+  }
+  return false;
 }
 
 // Send message to local MCP server
@@ -127,11 +178,14 @@ async function handleRpcRequest(data) {
       }
 
       case 'GENERATE': {
-        const tab = await ensureFlowTab();
+        const tab = await ensureFlowTab({ makeActive: true });
         if (!tab || !tab.id) {
           sendToMcp({ id, success: false, error: 'Could not open or find Google Flow tab' });
           return;
         }
+
+        // Ensure content script is mounted and active
+        await waitForContentScript(tab.id, 6000);
 
         const groupId = `mcp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const payload = {
