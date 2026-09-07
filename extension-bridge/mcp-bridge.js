@@ -162,6 +162,112 @@ async function handleRpcRequest(data) {
         break;
       }
 
+            case 'SCREENSHOT': {
+        const tab = await getFlowTab();
+        if (!tab || !tab.id) {
+          sendToMcp({ id, success: false, error: 'No active Google Flow tab' });
+          return;
+        }
+        try {
+          chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 75 }, (dataUrl) => {
+            const lastErr = chrome.runtime.lastError;
+            if (lastErr || !dataUrl) {
+              sendToMcp({ id, success: false, error: lastErr ? lastErr.message : 'Failed to capture screenshot' });
+            } else {
+              const base64Data = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+              sendToMcp({
+                id,
+                success: true,
+                mimeType: 'image/jpeg',
+                data: base64Data,
+                url: tab.url,
+                title: tab.title
+              });
+            }
+          });
+        } catch (e) {
+          sendToMcp({ id, success: false, error: e.message });
+        }
+        break;
+      }
+
+      case 'RELOAD_TAB': {
+        const tab = await getFlowTab();
+        if (!tab || !tab.id) {
+          sendToMcp({ id, success: false, error: 'No Google Flow tab found to reload' });
+          return;
+        }
+        chrome.tabs.reload(tab.id, { bypassCache: true }, async () => {
+          await new Promise(r => setTimeout(r, 2500));
+          await waitForContentScript(tab.id, 10000);
+          sendToMcp({ id, success: true, message: 'Google Flow tab reloaded and content script re-mounted', tabId: tab.id });
+        });
+        break;
+      }
+
+      case 'HEAL_TAB': {
+        const tab = await getFlowTab();
+        if (!tab || !tab.id) {
+          sendToMcp({ id, success: false, error: 'No Google Flow tab found' });
+          return;
+        }
+        const healResult = await dismissFlowModals(tab.id);
+        sendToMcp({
+          id,
+          success: true,
+          tabId: tab.id,
+          modalDismissed: healResult.dismissed,
+          detectedError: healResult.detectedError || null
+        });
+        break;
+      }
+
+      case 'SCAN_ASSETS': {
+        const tab = await getFlowTab();
+        if (!tab || !tab.id) {
+          sendToMcp({ id, success: false, error: 'No active Google Flow tab' });
+          return;
+        }
+        try {
+          const res = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => {
+              const assets = [];
+              const videoElements = document.querySelectorAll('video');
+              videoElements.forEach(v => {
+                const src = v.src || v.currentSrc;
+                if (src && !src.startsWith('chrome-extension://')) {
+                  assets.push({
+                    type: 'video',
+                    url: src,
+                    duration: Math.round(v.duration || 0),
+                    paused: v.paused
+                  });
+                }
+              });
+              const imgElements = document.querySelectorAll('img[src*="googleusercontent.com"], img[src*="blob:"], img[src*="data:image"]');
+              imgElements.forEach(img => {
+                if (img.width > 120 && img.height > 120 && img.src) {
+                  assets.push({
+                    type: 'image',
+                    url: img.src,
+                    alt: img.alt || '',
+                    width: img.naturalWidth || img.width,
+                    height: img.naturalHeight || img.height
+                  });
+                }
+              });
+              return { total: assets.length, assets: assets.slice(0, 15) };
+            }
+          });
+          const result = res && res[0] && res[0].result ? res[0].result : { total: 0, assets: [] };
+          sendToMcp({ id, success: true, ...result });
+        } catch (e) {
+          sendToMcp({ id, success: false, error: e.message, total: 0, assets: [] });
+        }
+        break;
+      }
+
       case 'CANCEL': {
         const tab = await getFlowTab();
         if (!tab || !tab.id) {
@@ -204,7 +310,24 @@ async function handleRpcRequest(data) {
           isConcat: false
         };
 
-        activeJobs.set(groupId, { id, startTime: Date.now() });
+                // 45-second stuck generation watchdog with auto-recovery
+        const watchdog = setTimeout(async () => {
+          if (activeJobs.has(groupId)) {
+            warn(`[Watchdog] Generation ${groupId} has no progress for 45s. Running auto-healing...`);
+            const heal = await dismissFlowModals(tab.id);
+            if (heal.dismissed) {
+              log(`[Watchdog] Auto-dismissed blocking modal: ${heal.detectedError || 'Error dialog'}`);
+              sendToMcp({
+                type: 'HEALING_EVENT',
+                id,
+                action: 'MODAL_DISMISSED',
+                errorDetected: heal.detectedError
+              });
+            }
+          }
+        }, 45000);
+
+        activeJobs.set(groupId, { id, startTime: Date.now(), watchdogTimer: watchdog, tabId: tab.id });
 
         // Dispatch AUTO_FILL_FLOW to content script
         chrome.tabs.sendMessage(tab.id, {
@@ -253,6 +376,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const { data } = message;
     if (data && data.groupId && activeJobs.has(data.groupId)) {
       const job = activeJobs.get(data.groupId);
+      // Reset watchdog on progress activity
+      if (job.watchdogTimer) {
+        clearTimeout(job.watchdogTimer);
+        job.watchdogTimer = setTimeout(async () => {
+          if (activeJobs.has(data.groupId)) {
+            warn(`[Watchdog] Stalled at ${data.percentage}%. Running modal healing...`);
+            await dismissFlowModals(job.tabId);
+          }
+        }, 45000);
+      }
       sendToMcp({
         type: 'PROGRESS',
         id: job.id,
@@ -266,6 +399,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (data && data.id && activeJobs.has(data.id)) {
       const job = activeJobs.get(data.id);
       if (data.status === 'completed' || data.status === 'error' || data.status === 'cancelled') {
+        if (job.watchdogTimer) clearTimeout(job.watchdogTimer);
         activeJobs.delete(data.id);
         sendToMcp({
           id: job.id,

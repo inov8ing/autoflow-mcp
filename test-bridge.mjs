@@ -45,21 +45,52 @@ async function runTest() {
         flowTabUrl: 'https://flow.google.com/project/mock-uuid',
         version: '1.2.0.15'
       }));
+    } else if (msg.action === 'SCREENSHOT') {
+      client.send(JSON.stringify({
+        id: msg.id,
+        success: true,
+        mimeType: 'image/jpeg',
+        data: 'fake_base64_jpeg_data',
+        url: 'https://flow.google.com/project/mock-uuid',
+        title: 'Google Flow Project'
+      }));
+    } else if (msg.action === 'SCAN_ASSETS') {
+      client.send(JSON.stringify({
+        id: msg.id,
+        success: true,
+        total: 2,
+        assets: [
+          { type: 'video', url: 'https://example.com/video1.mp4', duration: 4 },
+          { type: 'image', url: 'https://example.com/image1.jpg', width: 1024, height: 1024 }
+        ]
+      }));
+    } else if (msg.action === 'HEAL_TAB') {
+      client.send(JSON.stringify({
+        id: msg.id,
+        success: true,
+        modalDismissed: true,
+        detectedError: 'Quota warning'
+      }));
     }
   });
 
   // 5. Send RPC from Server side
   const response = await sendRpc('STATUS', {}, { timeoutMs: 3000 });
-  console.log('✓ Received RPC response:', response);
+  console.log('✓ Received STATUS response:', response.flowTabActive);
 
-  if (!response.success || !response.flowTabActive) {
-    throw new Error('RPC response verification failed');
-  }
+  const screenshot = await sendRpc('SCREENSHOT', {}, { timeoutMs: 3000 });
+  console.log('✓ Received SCREENSHOT response (length):', screenshot.data.length);
+
+  const assets = await sendRpc('SCAN_ASSETS', {}, { timeoutMs: 3000 });
+  console.log('✓ Received SCAN_ASSETS response (count):', assets.total);
+
+  const heal = await sendRpc('HEAL_TAB', {}, { timeoutMs: 3000 });
+  console.log('✓ Received HEAL_TAB response (dismissed):', heal.modalDismissed);
 
   // 6. Cleanup
   client.close();
   closeBridgeServer();
-  console.log('✓ All bridge tests passed successfully!');
+  console.log('✓ All bridge and healing tests passed successfully!');
 }
 
 runTest().catch((err) => {

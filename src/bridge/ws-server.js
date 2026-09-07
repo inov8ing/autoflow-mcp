@@ -149,6 +149,22 @@ export function sendRpc(action, params = {}, options = {}) {
   });
 }
 
+export function captureScreenshot(options = {}) {
+  return sendRpc('SCREENSHOT', {}, { timeoutMs: options.timeoutMs || 15000 });
+}
+
+export function scanAssets(options = {}) {
+  return sendRpc('SCAN_ASSETS', {}, { timeoutMs: options.timeoutMs || 15000 });
+}
+
+export function reloadTab(options = {}) {
+  return sendRpc('RELOAD_TAB', {}, { timeoutMs: options.timeoutMs || 30000 });
+}
+
+export function healTab(options = {}) {
+  return sendRpc('HEAL_TAB', {}, { timeoutMs: options.timeoutMs || 15000 });
+}
+
 export function closeBridgeServer() {
   if (wss) {
     wss.close();
@@ -157,3 +173,4 @@ export function closeBridgeServer() {
     extensionInfo = null;
   }
 }
+

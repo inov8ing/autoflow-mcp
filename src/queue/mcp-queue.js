@@ -50,15 +50,39 @@ export class McpJobQueue {
     console.error(`[Autoflow Queue] Processing job ${this.activeJob.id}: "${this.activeJob.prompt.substring(0, 40)}..."`);
 
     try {
-      const result = await sendRpc('GENERATE', this.activeJob.params, {
-        timeoutMs: 600000, // 10 minute timeout
-        onProgress: (prog) => {
-          if (this.activeJob) {
-            this.activeJob.progress = prog.percentage || this.activeJob.progress;
-            this.activeJob.progressStatus = prog.status || 'generating';
+      let attempts = 0;
+      let result = null;
+      let lastError = null;
+
+      while (attempts < 2) {
+        attempts++;
+        try {
+          result = await sendRpc('GENERATE', this.activeJob.params, {
+            timeoutMs: 600000, // 10 minute timeout
+            onProgress: (prog) => {
+              if (this.activeJob) {
+                this.activeJob.progress = prog.percentage || this.activeJob.progress;
+                this.activeJob.progressStatus = prog.status || 'generating';
+              }
+            }
+          });
+          break; // Success
+        } catch (err) {
+          lastError = err;
+          console.error(`[Autoflow Queue] Attempt ${attempts} for job ${this.activeJob.id} failed:`, err.message);
+          if (attempts < 2) {
+            console.error(`[Autoflow Queue] Attempting auto-healing and retrying in 3s...`);
+            try {
+              await sendRpc('HEAL_TAB', {}, { timeoutMs: 5000 });
+            } catch (e) {}
+            await new Promise(r => setTimeout(r, 3000));
           }
         }
-      });
+      }
+
+      if (!result && lastError) {
+        throw lastError;
+      }
 
       this.activeJob.status = 'completed';
       this.activeJob.completedAt = new Date().toISOString();
@@ -136,6 +160,20 @@ export class McpJobQueue {
     if (this.history.length > 20) {
       this.history.pop();
     }
+  }
+
+  clearQueue() {
+    const cleared = [];
+    while (this.queue.length > 0) {
+      const job = this.queue.shift();
+      job.status = 'cancelled';
+      job.completedAt = new Date().toISOString();
+      job.error = 'Queue was cleared';
+      this.addToHistory(job);
+      job.reject(new Error('Queue was cleared by user or agent'));
+      cleared.push(job.id);
+    }
+    return { success: true, count: cleared.length, clearedJobs: cleared };
   }
 
   getQueueState() {

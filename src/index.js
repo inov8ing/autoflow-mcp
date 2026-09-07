@@ -11,7 +11,11 @@ import {
   startBridgeServer,
   isExtensionConnected,
   getExtensionInfo,
-  sendRpc
+  sendRpc,
+  captureScreenshot,
+  scanAssets,
+  reloadTab,
+  healTab
 } from './bridge/ws-server.js';
 import { jobQueue } from './queue/mcp-queue.js';
 
@@ -23,7 +27,7 @@ startBridgeServer(port);
 const server = new Server(
   {
     name: 'autoflow-mcp',
-    version: '2.0.0'
+    version: '2.1.0'
   },
   {
     capabilities: {
@@ -78,23 +82,21 @@ const TOOL_DEFINITIONS = [
         },
         aspectRatio: {
           type: 'string',
-          description: 'Aspect ratio: "16:9", "9:16", "1:1", "4:3", "3:4".',
+          description: 'Aspect ratio: "16:9", "9:16", "1:1", "4:3", or "3:4".',
           enum: ['16:9', '9:16', '1:1', '4:3', '3:4']
         },
         outputCount: {
           type: 'number',
-          description: 'Number of outputs to generate (1, 2, or 4). Default is 1.',
-          enum: [1, 2, 4]
+          description: 'Number of variations to produce (default: 1, max: 4).'
         },
         videoOption: {
           type: 'string',
-          description: 'Duration for video: "4s", "6s", "8s", "10s".',
-          enum: ['4s', '6s', '8s', '10s']
+          description: 'Video duration option: "4s" or "8s".',
+          enum: ['4s', '8s']
         },
-        characters: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'List of character names to automatically mention with @ in the prompt.'
+        characterTag: {
+          type: 'string',
+          description: 'Character tag to maintain subject consistency (e.g. "@character_1").'
         },
         autoDownloadResourceQuality: {
           type: 'string',
@@ -112,6 +114,46 @@ const TOOL_DEFINITIONS = [
   {
     name: 'autoflow_list_characters',
     description: 'Scan and list all available character tags in the currently open Google Flow project.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'autoflow_capture_screenshot',
+    description: 'Capture a visual JPEG screenshot of the Google Flow project workspace so the AI agent can inspect progress, verify visual output, or diagnose UI state.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'autoflow_get_recent_assets',
+    description: 'Scan and list all recent video and image generation assets produced on the Google Flow project canvas.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'autoflow_heal_flow',
+    description: 'Trigger self-healing: automatically detect and dismiss any blocking Google Flow error dialogs, rate limit popups, or warning snackbars.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'autoflow_reload_tab',
+    description: 'Force-reload the Google Flow project tab and re-mount the extension bridge if the web app appears frozen or unresponsive.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'autoflow_clear_queue',
+    description: 'Clear all pending queued generation jobs.',
     inputSchema: {
       type: 'object',
       properties: {}
@@ -163,9 +205,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        const extStatus = await sendRpc('STATUS', {}, { timeoutMs: 10000 });
-        const info = getExtensionInfo();
-
+        const extStatus = await sendRpc('STATUS', {}, { timeoutMs: 8000 });
+        const queueState = jobQueue.getQueueState();
         return {
           content: [
             {
@@ -174,9 +215,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 {
                   status: 'connected',
                   extensionConnected: true,
-                  extension: info.info,
-                  flow: extStatus,
-                  queue: jobQueue.getQueueState()
+                  flowTabActive: extStatus.flowTabActive,
+                  flowTabUrl: extStatus.flowTabUrl,
+                  extensionVersion: extStatus.version,
+                  queue: queueState
                 },
                 null,
                 2
@@ -199,11 +241,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'autoflow_get_queue': {
+        const state = jobQueue.getQueueState();
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(jobQueue.getQueueState(), null, 2)
+              text: JSON.stringify(state, null, 2)
             }
           ]
         };
@@ -211,27 +254,49 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'autoflow_generate': {
         const prompt = args.prompt;
-        const isVideo = args.mode?.includes('Video') ||
-          (!args.mode && (prompt.toLowerCase().includes('video') || prompt.toLowerCase().includes('shot') || prompt.toLowerCase().includes('cinematic')));
+        if (!prompt || typeof prompt !== 'string') {
+          throw new McpError(ErrorCode.InvalidParams, 'Parameter "prompt" is required.');
+        }
 
-        const defaultMode = isVideo ? 'textToVideo' : 'textToImage';
-        const defaultModel = isVideo ? 'Veo 3.1 - Fast' : 'Nano Banana 2';
+        const characters = [];
+        if (args.characterTag) {
+          characters.push(args.characterTag);
+        }
 
-        const params = {
+        const genParams = {
           prompt,
-          mode: args.mode || defaultMode,
-          model: args.model || defaultModel,
-          aspectRatio: args.aspectRatio || '16:9',
+          mode: args.mode,
+          model: args.model,
+          aspectRatio: args.aspectRatio,
           outputCount: args.outputCount || 1,
-          videoOption: args.videoOption || '4s',
-          characters: args.characters || [],
+          videoOption: args.videoOption,
+          characters,
           autoDownloadResourceQuality: args.autoDownloadResourceQuality || '1080',
           folderName: args.folderName || 'Autoflow_MCP'
         };
 
-        // Route through the sequential FIFO queue to prevent collisions
-        const result = await jobQueue.enqueue(params);
+        const result = await jobQueue.enqueue(genParams);
 
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  success: true,
+                  message: `Generation completed successfully for prompt: "${prompt.substring(0, 50)}..."`,
+                  result
+                },
+                null,
+                2
+              )
+            }
+          ]
+        };
+      }
+
+      case 'autoflow_list_characters': {
+        const result = await sendRpc('SCAN_CHARACTERS', {}, { timeoutMs: 20000 });
         return {
           content: [
             {
@@ -242,8 +307,66 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case 'autoflow_list_characters': {
-        const result = await sendRpc('SCAN_CHARACTERS', {}, { timeoutMs: 20000 });
+      case 'autoflow_capture_screenshot': {
+        const result = await captureScreenshot();
+        return {
+          content: [
+            {
+              type: 'image',
+              data: result.data,
+              mimeType: result.mimeType || 'image/jpeg'
+            },
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                url: result.url,
+                title: result.title,
+                message: 'Screenshot captured from active Google Flow workspace'
+              }, null, 2)
+            }
+          ]
+        };
+      }
+
+      case 'autoflow_get_recent_assets': {
+        const result = await scanAssets();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        };
+      }
+
+      case 'autoflow_heal_flow': {
+        const result = await healTab();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        };
+      }
+
+      case 'autoflow_reload_tab': {
+        const result = await reloadTab();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        };
+      }
+
+      case 'autoflow_clear_queue': {
+        const result = jobQueue.clearQueue();
         return {
           content: [
             {

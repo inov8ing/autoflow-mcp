@@ -1,6 +1,6 @@
 {
   "name": "autoflow-mcp",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Zero-config Model Context Protocol (MCP) server for Google Flow via Autoflow Chrome Extension",
   "type": "module",
   "main": "src/index.js",
