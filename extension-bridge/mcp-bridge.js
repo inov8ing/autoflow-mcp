@@ -294,5 +294,24 @@ function scheduleReconnect() {
   }, RECONNECT_DELAY_MS);
 }
 
+// Keep-alive alarm and tab triggers for Manifest V3 lifecycle
+try {
+  chrome.alarms.create('autoflow_mcp_keepalive', { periodInMinutes: 1 });
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'autoflow_mcp_keepalive') {
+      initMcpBridge();
+    }
+  });
+
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'complete' && tab.url && (tab.url.includes('flow.google.com') || tab.url.includes('labs.google'))) {
+      initMcpBridge();
+    }
+  });
+} catch (e) {
+  // Ignore in environments where alarms/tabs might be restricted
+}
+
 // Start bridge
 initMcpBridge();
+
