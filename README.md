@@ -1,62 +1,36 @@
-# ⚡ Autoflow MCP
+<div align="center">
+  <img src="https://raw.githubusercontent.com/inov8ing/autoflow-mcp/main/assets/logo.png" alt="Autoflow MCP Logo" width="200" />
+  <h1>Autoflow MCP (Model Context Protocol) Server</h1>
+  <p><strong>Brought to you by <a href="https://inov8ing.io">inov8ing.io</a></strong></p>
+  <p><em>The ultimate background automation server for AI Video and Image Generation in Google Flow</em></p>
 
-**Zero-Config AI Agent Automation for Google Flow via the Autoflow Chrome Extension.**
+  [![NPM Version](https://img.shields.io/npm/v/autoflow-mcp.svg)](https://www.npmjs.com/package/autoflow-mcp)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+</div>
 
-Control [Google Flow](https://flow.google.com/) — image & video generation with **Veo 3.1**, **Nano Banana**, and **Imagen 4** — directly from your AI agent without browser flags, terminal profiles, or bot blocks.
+<br />
 
----
+**Autoflow MCP** is a powerful Model Context Protocol (MCP) server that seamlessly bridges modern AI Agents (like Cursor, Cline, Windsurf, or custom LLMs) directly with the [Autoflow Chrome Extension](https://chromewebstore.google.com/detail/autoflow-%E2%80%94-veo-3-nano-ban/eklokclnmljbdijdhnamfcdhfomdmbmg?utm_source=item-share-cp). 
 
-## 🌟 Why Autoflow MCP?
+By acting as a background generation queue, Autoflow MCP allows AI agents to command browser-based AI generation models (such as Imagen 3, Omni Flash, and Veo 3) fully autonomously—achieving a complete "fire and forget" workflow without locking up your terminal or requiring manual intervention.
 
-Traditional browser MCP servers require launching Chrome with `--remote-debugging-port=9222`, hunting down profile directories, closing personal browser windows, and dealing with Google bot detection.
+## 🌟 Key Features
 
-**Autoflow MCP eliminates all of that:**
-* **Zero Configuration**: No terminal flags or profile paths. It bridges directly to your everyday Chrome browser.
-* **100% Anti-Bot Immune**: Actions run inside your real, active Google session via the Autoflow extension.
-* **Cross-Platform**: Works identically on Windows, macOS, and Linux out of the box.
-* **Fast & Lightweight**: Zero headless browser overhead (< 15MB RAM).
+- **Full MCP Integration**: Exposes a robust set of tools (`autoflow_generate`, `autoflow_screenshot`, `autoflow_status`) directly to any MCP-compliant AI client.
+- **Background Queue System (Fire & Forget)**: Drop a prompt into the server, and the built-in queue handles the generation, progress monitoring, and asset saving entirely in the background.
+- **Double-Engine Auto-Download**: Assets (images, 10s videos, etc.) are forcefully extracted and saved directly to your local `Downloads` folder using our proprietary fallback downloader. No more hanging or skipped downloads!
+- **Zero-Touch Automation**: Once paired with the [Autoflow Chrome Extension](https://chromewebstore.google.com/detail/autoflow-%E2%80%94-veo-3-nano-ban/eklokclnmljbdijdhnamfcdhfomdmbmg?utm_source=item-share-cp), AI Agents can drive complex UI workflows entirely via WebSocket RPC.
+- **Developed by [inov8ing.io](https://inov8ing.io)**: Ensuring highly professional, scalable, and resilient automation solutions.
 
----
+## 🚀 Installation & Setup
 
-## 🏗️ Architecture
+### 1. Install the Chrome Extension
+Before using the MCP server, you must install the official Chrome Extension to act as the browser-side worker:
+👉 **[Download Autoflow — Veo 3 Nano from the Chrome Web Store](https://chromewebstore.google.com/detail/autoflow-%E2%80%94-veo-3-nano-ban/eklokclnmljbdijdhnamfcdhfomdmbmg?utm_source=item-share-cp)**
 
-```
-┌───────────────────────────────┐
-│ AI Client (Claude / OpenCode) │
-└───────────────┬───────────────┘
-                │ Standard MCP Stdio
-                ▼
-┌───────────────────────────────┐
-│      Autoflow MCP Server      │
-│     (ws://127.0.0.1:19845)    │
-└───────────────┬───────────────┘
-                │ Local WebSocket RPC
-                ▼
-┌───────────────────────────────┐
-│   Autoflow Chrome Extension   │
-│  (Background Service Worker)  │
-└───────────────┬───────────────┘
-                │ Native DOM & CDP Automation
-                ▼
-┌───────────────────────────────┐
-│    Google Flow Web Studio     │
-│   (https://flow.google.com/)  │
-└───────────────────────────────┘
-```
+### 2. Configure Your AI IDE (Cursor, Cline, Windsurf)
+Since Autoflow is published globally on NPM, you don't even need to clone this repository. Simply add it to your MCP configuration file (e.g. `mcp.json` or Cursor's MCP settings):
 
----
-
-## 🚀 Quick Start
-
-### 1. Requirements
-* Google Chrome with the **Autoflow Extension** installed and enabled.
-* Node.js >= 18.
-
-### 2. Configure Your AI Agent
-
-Add **Autoflow MCP** to your AI client's configuration (Claude Desktop, OpenCode, Antigravity `mcp_config.json`, or Cursor):
-
-#### Using `npx` (Recommended for Users)
 ```json
 {
   "mcpServers": {
@@ -68,41 +42,26 @@ Add **Autoflow MCP** to your AI client's configuration (Claude Desktop, OpenCode
 }
 ```
 
-#### Running from Local Repository
-```json
-{
-  "mcpServers": {
-    "autoflow": {
-      "command": "node",
-      "args": ["F:/google-flow-browser-mcp-main/src/index.js"]
-    }
-  }
-}
-```
+## 🛠️ Usage for AI Agents
 
-### 3. Start Generating!
-Just talk to your AI assistant:
-* *"Check if Autoflow and Google Flow are connected."*
-* *"Generate a cinematic drone shot of a neon cyberpunk city in 16:9 ratio using Veo 3.1."*
-* *"List the available characters in my current Flow project."*
+Once connected, your AI Agent will have access to the following tools:
 
----
+- `autoflow_generate`: The primary powerhouse tool. Accepts `prompt`, `mode` (`textToImage`, `textToVideo`), `model` (e.g. `Omni Flash`), and `aspectRatio`. Jobs are queued in the background.
+- `autoflow_status`: Check the status of the Google Flow tab, the extension connection, and the background job queue.
+- `autoflow_screenshot`: Request an immediate snapshot of the active generation browser tab for debugging context.
+- `autoflow_scan_assets`: Manually command the extension to scrape the DOM for generated media URLs.
 
-## 🔧 Tools Included
+### Examples
 
-| Tool | Parameters | Description |
-| :--- | :--- | :--- |
-| `autoflow_status` | *(none)* | Checks extension and Google Flow tab connectivity. |
-| `autoflow_open_flow` | *(none)* | Opens `https://flow.google.com/` in an active tab. |
-| `autoflow_generate` | `prompt`, `mode`, `model`, `aspectRatio`, `outputCount`, `videoOption`, `characters` | Generates images or videos with Veo 3 or Nano Banana models. |
-| `autoflow_list_characters` | *(none)* | Scans all available `@` character tags in the open project. |
-| `autoflow_cancel` | `groupId` *(optional)* | Cancels any ongoing generation queue. |
+Check out the `/examples` directory in this repository for standalone Node.js scripts demonstrating how to interact with the WebSocket Bridge and Queue system directly!
+- `batch-generate-nature.mjs`: Demonstrates queuing 10 high-quality image generations in the background.
+- `generate-korean-girl-video.mjs`: Demonstrates triggering a 10s video generation workflow.
+
+## 🤝 Contributing & Support
+Built with ❤️ by the team at **[inov8ing.io](https://inov8ing.io)**. 
+We specialize in cutting-edge browser automation, AI workflow integrations, and next-generation product development.
+
+For enterprise inquiries or advanced feature requests, visit our website or open an issue on this repository!
 
 ---
-
-## 🧪 Testing
-
-Run the automated bridge test suite:
-```bash
-npm test
-```
+*Note: This project is an independent automation tool and is not officially affiliated with Google Flow. Always ensure your usage complies with the respective platform's Terms of Service.*
