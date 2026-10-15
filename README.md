@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/inov8ing/autoflow-mcp/master/assets/logo.png" alt="Autoflow MCP Logo" width="200" />
+  <img src="https://raw.githubusercontent.com/inov8ing/autoflow-mcp/main/assets/logo.png" alt="Autoflow MCP Logo" width="200" />
   <h1>Autoflow MCP (Model Context Protocol) Server</h1>
   <p><strong>Brought to you by <a href="https://inov8ing.io">inov8ing.io</a></strong></p>
   <p><em>The ultimate background automation server for AI Video and Image Generation in Google Flow</em></p>
@@ -34,7 +34,7 @@ With Autoflow MCP, you can automate breathtaking generations in the background. 
 > *"A calm crystal-clear lake at pastel sunrise, soft pink and lavender sky reflecting on the mirror-like water, smooth stones on the shoreline, gentle mist rising from the surface, ultra-detailed, peaceful ambiance, cinematic lighting, 8k."*
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/inov8ing/autoflow-mcp/master/assets/media/pastel_lake.jpg" alt="Pastel Sunrise Lake" width="800" />
+  <img src="https://raw.githubusercontent.com/inov8ing/autoflow-mcp/main/assets/media/pastel_lake.jpg" alt="Pastel Sunrise Lake" width="800" />
 </div>
 
 ### Cinematic Video Generation (Omni Flash / Veo 3)
@@ -43,8 +43,8 @@ With Autoflow MCP, you can automate breathtaking generations in the background. 
 > *"Close-up portrait of a breathtakingly cute 20-year-old Korean girl with sweet gentle smile, soft pastel oversized knit sweater, natural glass-skin makeup, delicate rosy cheeks, glossy peach lip tint, soft wispy bangs, candid warm golden hour café lighting, aesthetic bokeh background, ultra-detailed textures, 8k masterpiece, photorealistic. The girl looks directly into the camera with sparkling eyes, blushes cutely, and softly says 'Oppa~' in a very cute, gentle, and romantic whisper with a charming affectionate smile, smooth natural facial animation and lip sync, cinematic photorealistic 8k video."*
 
 <div align="center">
-  <video src="https://raw.githubusercontent.com/inov8ing/autoflow-mcp/master/assets/media/cute_korean_girl.mp4" controls="controls" width="800">
-    <a href="https://raw.githubusercontent.com/inov8ing/autoflow-mcp/master/assets/media/cute_korean_girl.mp4">Click to view the video</a>
+  <video src="https://raw.githubusercontent.com/inov8ing/autoflow-mcp/main/assets/media/cute_korean_girl.mp4" controls="controls" width="800">
+    <a href="https://raw.githubusercontent.com/inov8ing/autoflow-mcp/main/assets/media/cute_korean_girl.mp4">Click to view the video</a>
   </video>
 </div>
 
